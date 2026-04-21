@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Inspections App</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        * {
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, useEffect, useRef } = React;
+
+        const InspectionApp = () => {
+            const [inspections, setInspections] = useState([]);
+            const [selectedInspection, setSelectedInspection] = useState(null);
+            const [notes, setNotes] = useState({});
+            const [photos, setPhotos] = useState({});
+            const [inspectionStatus, setInspectionStatus] = useState({});
+            const [photoViewerOpen, setPhotoViewerOpen] = useState(null);
+            const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+            const cameraInputRef = useRef(null);
+            const fileInputRef = useRef(null);
+
+            // Load data from localStorage on mount
+            useEffect(() => {
+                const savedNotes = localStorage.getItem('inspectionNotes');
+                const savedPhotos = localStorage.getItem('inspectionPhotos');
+                const savedStatus = localStorage.getItem('inspectionStatus');
+                
+                if (savedNotes) setNotes(JSON.parse(savedNotes));
+                if (savedPhotos) setPhotos(JSON.parse(savedPhotos));
+                if (savedStatus) setInspectionStatus(JSON.parse(savedStatus));
+
+                // Load sample data if no inspections exist
+                if (inspections.length === 0) {
+                    loadSampleData();
+                }
+            }, []);
+
+            // Save notes whenever they change
+            useEffect(() => {
+                localStorage.setItem('inspectionNotes', JSON.stringify(notes));
+            }, [notes]);
+
+            // Save status whenever it changes
+            useEffect(() => {
+                localStorage.setItem('inspectionStatus', JSON.stringify(inspectionStatus));
+            }, [inspectionStatus]);
+
+            const loadSampleData = () => {
+                const sampleData = [
+                    {
+                        id: 290682,
+                        date: '4/24/2026',
+                        type: 'I560 - HVAC RESIDENTIAL FINAL',
+                        address: '1009 BELL GROVE LN',
+                        inspector: '1088',
+                    },
+                    {
+                        id: 277625,
+                        date: '4/23/2026',
+                        type: 'I560 - HVAC RESIDENTIAL FINAL',
+                        address: '24 STONEHOUSE CT',
+                        inspector: '1088',
+                    },
+                    {
+                        id: 294362,
+                        date: '4/22/2026',
+                        type: 'I555 - HVAC RESIDENTIAL ROUGH IN',
+                        address: '5009 FINLEN LN',
+                        inspector: '1088',
+                    },
+                    {
+                        id: 293422,
+                        date: '4/21/2026',
+                        type: 'I555 - HVAC RESIDENTIAL ROUGH IN',
+                        address: '5210 CASTLEBAR DR',
+                        inspector: '1088',
+                    },
+                    {
+                        id: 299082,
+                        date: '4/20/2026',
+                        type: 'I555 - HVAC RESIDENTIAL ROUGH IN',
+                        address: '1211 ELMWOOD ST',
+                        inspector: '1088',
+                    },
+                ];
+                setInspections(sampleData);
+            };
+
+            const handleCSVUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const csv = e.target.result;
+                    const lines = csv.split('\n');
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    
+                    const newInspections = lines.slice(1)
+                        .filter(line => line.trim())
+                        .map(line => {
+                            const values = line.split(',').map(v => v.trim());
+                            return {
+                                id: values[0],
+                                date: values[1],
+                                type: values[2],
+                                inspector: values[3],
+                                address: values[5],
+                            };
+                        });
+                    
+                    setInspections(newInspections);
+                };
+                reader.readAsText(file);
+            };
+
+            const handlePhotoCapture = (inspectionId) => {
+                cameraInputRef.current.inspectionId = inspectionId;
+                cameraInputRef.current.click();
+            };
+
+            const handlePhotoSelect = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const inspectionId = cameraInputRef.current.inspectionId;
+                    const currentPhotos = photos[inspectionId] || [];
+                    const newPhotos = {
+                        ...photos,
+                        [inspectionId]: [...currentPhotos, { 
+                            data: e.target.result, 
+                            timestamp: new Date().toLocaleString(),
+                            id: Date.now()
+                        }]
+                    };
+                    setPhotos(newPhotos);
+                    localStorage.setItem('inspectionPhotos', JSON.stringify(newPhotos));
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const removePhoto = (inspectionId, index) => {
+                const updated = {
+                    ...photos,
+                    [inspectionId]: photos[inspectionId].filter((_, i) => i !== index)
+                };
+                setPhotos(updated);
+                localStorage.setItem('inspectionPhotos', JSON.stringify(updated));
+            };
+
+            const openGoogleMaps = (address) => {
+                const encodedAddress = encodeURIComponent(address);
+                window.open(`https://www.google.com/maps/search/${encodedAddress}`, '_blank');
+            };
+
+            const getStatusColor = (id) => {
+                const status = inspectionStatus[id];
+                if (status === 'pass') return 'text-green-600';
+                if (status === 'fail') return 'text-red-600';
+                if (status === 'pending') return 'text-yellow-600';
+                return 'text-gray-400';
+            };
+
+            const getStatusIcon = (id) => {
+                const status = inspectionStatus[id];
+                if (status === 'pass') return '✅';
+                if (status === 'fail') return '❌';
+                if (status === 'pending') return '⏳';
+                return null;
+            };
+
+            const exportData = () => {
+                const data = {
+                    inspections,
+                    notes,
+                    inspectionStatus,
+                    exportDate: new Date().toLocaleString(),
+                };
+                const json = JSON.stringify(data, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `inspection-data-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const emailInspectionResults = (insp) => {
+                const currentNotes = notes[insp.id] || 'No notes added';
+                const currentPhotos = photos[insp.id] || [];
+                const currentStatus = inspectionStatus[insp.id] || 'Not marked';
+
+                const statusLabel = 
+                    currentStatus === 'pass' ? '✅ PASS' :
+                    currentStatus === 'fail' ? '❌ FAIL' :
+                    currentStatus === 'pending' ? '⏳ PENDING' :
+                    '⚪ NOT MARKED';
+
+                const emailBody = `
+Inspection Report
+
+Inspection ID: ${insp.id}
+Address: ${insp.address}
+Inspection Type: ${insp.type}
+Scheduled Date: ${insp.date}
+
+Status: ${statusLabel}
+
+Notes:
+${currentNotes}
+
+Photos Attached: ${currentPhotos.length}
+
+---
+Generated on ${new Date().toLocaleString()}
+                `.trim();
+
+                const subject = `Inspection Report - ${insp.id} - ${insp.address}`;
+                const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+                
+                window.location.href = mailtoLink;
+            };
+
+            if (selectedInspection) {
+                const insp = selectedInspection;
+                const currentNotes = notes[insp.id] || '';
+                const currentPhotos = photos[insp.id] || [];
+                const currentStatus = inspectionStatus[insp.id] || null;
+
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                        {/* Header */}
+                        <div className="sticky top-0 z-50 bg-gradient-to-r from-orange-600 to-orange-500 shadow-lg">
+                            <div className="max-w-4xl mx-auto px-4 py-4">
+                                <button
+                                    onClick={() => setSelectedInspection(null)}
+                                    className="text-white text-sm font-semibold hover:text-orange-100 transition"
+                                >
+                                    ← Back to List
+                                </button>
+                                <h1 className="text-white text-2xl font-bold mt-2">Inspection #{insp.id}</h1>
+                            </div>
+                        </div>
+
+                        <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+                            {/* Inspection Details */}
+                            <div className="bg-slate-700/50 rounded-lg p-6 border border-slate-600">
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-slate-400 text-sm font-semibold uppercase">Address</p>
+                                        <div className="flex items-center justify-between mt-2 gap-2 flex-wrap">
+                                            <p className="text-white text-lg font-bold flex-1">{insp.address}</p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => openGoogleMaps(insp.address)}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition whitespace-nowrap text-sm"
+                                                >
+                                                    📍 Directions
+                                                </button>
+                                                <button
+                                                    onClick={() => emailInspectionResults(insp)}
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition whitespace-nowrap text-sm"
+                                                >
+                                                    📧 Email
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-slate-400 text-sm font-semibold uppercase">Type</p>
+                                            <p className="text-white text-sm mt-1">{insp.type}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-400 text-sm font-semibold uppercase">Date</p>
+                                            <p className="text-white text-sm mt-1">{insp.date}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status Selection */}
+                            <div className="bg-slate-700/50 rounded-lg p-6 border border-slate-600">
+                                <p className="text-slate-400 text-sm font-semibold uppercase mb-4">Inspection Status</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {[
+                                        { value: 'pass', label: 'Pass', icon: '✅', color: 'green' },
+                                        { value: 'fail', label: 'Fail', icon: '❌', color: 'red' },
+                                        { value: 'pending', label: 'Pending', icon: '⏳', color: 'yellow' }
+                                    ].map(({ value, label, icon, color }) => (
+                                        <button
+                                            key={value}
+                                            onClick={() => setInspectionStatus({ ...inspectionStatus, [insp.id]: value })}
+                                            className={`py-3 rounded-lg border-2 transition font-semibold text-sm flex items-center justify-center gap-2 ${
+                                                currentStatus === value
+                                                    ? `border-${color}-500 bg-${color}-500/20 text-${color}-400`
+                                                    : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                                            }`}
+                                        >
+                                            <span>{icon}</span>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Notes Section */}
+                            <div className="bg-slate-700/50 rounded-lg p-6 border border-slate-600">
+                                <p className="text-slate-400 text-sm font-semibold uppercase mb-4">📝 Notes</p>
+                                <textarea
+                                    value={currentNotes}
+                                    onChange={(e) => setNotes({ ...notes, [insp.id]: e.target.value })}
+                                    placeholder="Add inspection notes..."
+                                    className="w-full bg-slate-800 text-white border border-slate-600 rounded-lg p-4 font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition resize-none h-32"
+                                />
+                            </div>
+
+                            {/* Photos Section */}
+                            <div className="bg-slate-700/50 rounded-lg p-6 border border-slate-600">
+                                <p className="text-slate-400 text-sm font-semibold uppercase mb-4">📷 Photos ({currentPhotos.length})</p>
+
+                                <button
+                                    onClick={() => handlePhotoCapture(insp.id)}
+                                    className="w-full bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition mb-4 active:scale-95"
+                                >
+                                    📷 Take or Upload Photo
+                                </button>
+                                <input
+                                    ref={cameraInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={handlePhotoSelect}
+                                    style={{ display: 'none' }}
+                                />
+
+                                <div className="space-y-2">
+                                    {currentPhotos.length === 0 ? (
+                                        <p className="text-slate-500 text-sm text-center py-4">No photos yet. Add one above to get started!</p>
+                                    ) : (
+                                        <>
+                                            {currentPhotos.map((photo, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        setPhotoViewerOpen(insp.id);
+                                                        setCurrentPhotoIndex(idx);
+                                                    }}
+                                                    className="w-full bg-slate-800/50 hover:bg-slate-700/50 rounded-lg p-3 flex items-center justify-between border border-slate-600 transition text-left"
+                                                >
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-slate-300 text-sm truncate">📷 {photo.timestamp}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            removePhoto(insp.id, idx);
+                                                        }}
+                                                        className="ml-2 text-red-500 hover:text-red-400 transition p-1"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Photo Viewer Modal */}
+                        {photoViewerOpen === insp.id && currentPhotos.length > 0 && (
+                            <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+                                <div className="w-full max-w-2xl">
+                                    <button
+                                        onClick={() => setPhotoViewerOpen(null)}
+                                        className="text-white text-2xl mb-4 hover:text-gray-300"
+                                    >
+                                        ✕
+                                    </button>
+                                    <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                                        <img
+                                            src={currentPhotos[currentPhotoIndex].data}
+                                            alt={`Photo ${currentPhotoIndex + 1}`}
+                                            className="w-full h-auto max-h-96 object-contain"
+                                        />
+                                        <div className="p-4 bg-slate-800/50">
+                                            <p className="text-slate-300 text-sm mb-4">{currentPhotos[currentPhotoIndex].timestamp}</p>
+                                            <div className="flex items-center justify-between">
+                                                <button
+                                                    onClick={() => setCurrentPhotoIndex(Math.max(0, currentPhotoIndex - 1))}
+                                                    disabled={currentPhotoIndex === 0}
+                                                    className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-4 py-2 rounded transition"
+                                                >
+                                                    ← Previous
+                                                </button>
+                                                <span className="text-slate-300 text-sm">
+                                                    {currentPhotoIndex + 1} / {currentPhotos.length}
+                                                </span>
+                                                <button
+                                                    onClick={() => setCurrentPhotoIndex(Math.min(currentPhotos.length - 1, currentPhotoIndex + 1))}
+                                                    disabled={currentPhotoIndex === currentPhotos.length - 1}
+                                                    className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-4 py-2 rounded transition"
+                                                >
+                                                    Next →
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                    {/* Header */}
+                    <div className="sticky top-0 z-50 bg-gradient-to-r from-orange-600 to-orange-500 shadow-xl">
+                        <div className="max-w-4xl mx-auto px-4 py-6">
+                            <h1 className="text-white text-3xl font-bold">Field Inspections</h1>
+                            <p className="text-orange-100 text-sm mt-1">{inspections.length} inspections loaded</p>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+                        {/* Import/Export Controls */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition border border-slate-600"
+                            >
+                                📥 Import CSV
+                            </button>
+                            <button
+                                onClick={exportData}
+                                className="bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition border border-slate-600"
+                            >
+                                📥 Export Data
+                            </button>
+                        </div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv"
+                            onChange={handleCSVUpload}
+                            style={{ display: 'none' }}
+                        />
+
+                        {/* Inspection List */}
+                        <div className="space-y-3">
+                            {inspections.map((inspection) => (
+                                <button
+                                    key={inspection.id}
+                                    onClick={() => setSelectedInspection(inspection)}
+                                    className="w-full bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white rounded-lg p-4 transition transform hover:scale-102 border border-slate-600 text-left"
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <span className="text-orange-500 font-bold text-lg">#{inspection.id}</span>
+                                                {getStatusIcon(inspection.id) && (
+                                                    <span className={getStatusColor(inspection.id)}>
+                                                        {getStatusIcon(inspection.id)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-slate-300 font-semibold text-sm truncate">{inspection.type}</p>
+                                            <div className="flex items-center gap-2 mt-2 text-slate-400 text-sm">
+                                                <span>📍</span>
+                                                <span className="truncate">{inspection.address}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1 text-slate-400 text-xs">
+                                                <span>🕐</span>
+                                                <span>{inspection.date}</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            {notes[inspection.id] && (
+                                                <div className="text-slate-400 text-xs mb-2">📝 Notes</div>
+                                            )}
+                                            {(photos[inspection.id]?.length > 0) && (
+                                                <div className="text-slate-400 text-xs">📷 {photos[inspection.id].length} photos</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {inspections.length === 0 && (
+                            <div className="text-center py-16">
+                                <p className="text-slate-400 text-lg">No inspections loaded</p>
+                                <p className="text-slate-500 text-sm mt-2">Import a CSV file to get started</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<InspectionApp />);
+    </script>
+</body>
+</html>

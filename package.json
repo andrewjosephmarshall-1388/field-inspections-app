@@ -1,0 +1,12 @@
+{
+  "name": "field-inspections-app",
+  "version": "1.0.0",
+  "description": "Mobile field inspection app for MUNIS data",
+  "scripts": {
+    "start": "python3 -m http.server 3000",
+    "build": "echo 'No build needed for static HTML'"
+  },
+  "keywords": ["inspections", "field-work", "mobile"],
+  "author": "",
+  "license": "ISC"
+}
